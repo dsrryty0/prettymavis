@@ -1,0 +1,2093 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <title>MAVIS 城市定向</title>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <style>
+
+/* ══════════════════════════════════════════
+   ROOT VARIABLES
+══════════════════════════════════════════ */
+:root{
+  --black:#141414;--red:#C0392B;--blue:#1A56DB;--green:#1A7F4B;
+  --gold:#C9A84C;--gold-light:#F5E6C0;--gold-dark:#9A7A2A;
+  --yellow:#FBBF16;--white:#fff;--light:#F5F5F5;--mid:#e6e6e6;
+  --text:#2f2f2f;--cert-bg:#FAFAF7;--cert-dark:#1C2340;
+  --safe-top:env(safe-area-inset-top);--safe-bottom:env(safe-area-inset-bottom);
+  --radius:18px;--shadow:0 8px 24px rgba(0,0,0,.08);
+  --shadow-strong:5px 5px 0 rgba(0,0,0,.88);--stroke:2.5px solid var(--black);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0}
+html,body{height:100%;
+  font-family:-apple-system,BlinkMacSystemFont,"Roboto","Segoe UI",Arial,sans-serif;
+  background:var(--light);color:var(--text)}
+button,input,textarea{font-family:inherit}
+#app{height:100%;display:flex;flex-direction:column;
+  padding-top:var(--safe-top);padding-bottom:var(--safe-bottom);overflow:hidden}
+
+/* ══════════════════════════════════════════
+   HEADER
+══════════════════════════════════════════ */
+header{
+  flex-shrink:0;background:var(--black);color:var(--white);
+  padding:10px 16px;display:flex;justify-content:center;align-items:center;
+  gap:10px;position:relative;z-index:50;min-height:48px}
+.header-tap{
+  display:flex;align-items:center;gap:10px;
+  cursor:pointer;user-select:none}
+header h1{
+  margin:0;font-size:16px;font-weight:900;letter-spacing:.8px}
+.hd-mickey{
+  position:relative;width:30px;height:25px;flex-shrink:0}
+.hd-mickey .hm-head{
+  width:22px;height:22px;background:var(--white);border-radius:50%;
+  position:absolute;bottom:0;left:50%;transform:translateX(-50%)}
+.hd-mickey .hm-ear{
+  width:13px;height:13px;background:var(--white);border-radius:50%;
+  position:absolute;top:0}
+.hd-mickey .hm-ear.l{left:0}
+.hd-mickey .hm-ear.r{right:0}
+
+/* ══════════════════════════════════════════
+   PAGE SYSTEM
+══════════════════════════════════════════ */
+.page{display:none;flex:1;width:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.page.active{display:block}
+.page-inner{
+  min-height:100%;width:100%;
+  display:flex;flex-direction:column;align-items:center;
+  animation:pageIn .35s cubic-bezier(.2,.8,.4,1) both}
+.page.exiting .page-inner{animation:pageOut .18s ease both}
+@keyframes pageIn{
+  from{opacity:0;filter:blur(6px);transform:translateY(8px)}
+  to{opacity:1;filter:blur(0);transform:translateY(0)}}
+@keyframes pageOut{
+  from{opacity:1;filter:blur(0)}
+  to{opacity:0;filter:blur(6px)}}
+
+/* ══════════════════════════════════════════
+   SHAKE ANIMATION
+══════════════════════════════════════════ */
+@keyframes shake{
+  0%,100%{transform:translateX(0)}
+  15%{transform:translateX(-7px)}30%{transform:translateX(7px)}
+  45%{transform:translateX(-5px)}60%{transform:translateX(5px)}
+  75%{transform:translateX(-3px)}90%{transform:translateX(3px)}}
+.shake{animation:shake .42s ease both}
+@keyframes wrongShake{
+  0%,100%{transform:translateX(0)}
+  20%{transform:translateX(-6px)}40%{transform:translateX(6px)}
+  60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
+
+/* ══════════════════════════════════════════
+   COMMON LAYOUT
+══════════════════════════════════════════ */
+.container{width:100%;max-width:420px;padding:16px 18px 28px}
+
+/* ══════════════════════════════════════════
+   BUTTONS
+══════════════════════════════════════════ */
+.btn{
+  width:100%;max-width:340px;height:54px;border-radius:999px;border:none;
+  font-size:16px;font-weight:900;cursor:pointer;
+  transition:transform .12s,box-shadow .12s;
+  display:flex;align-items:center;justify-content:center;
+  gap:6px;user-select:none;margin:0 auto}
+.btn:active{transform:translate(3px,3px)}
+.btn-red{background:var(--red);color:#fff;box-shadow:4px 4px 0 #7b1e18}
+.btn-gold{background:var(--gold);color:#fff;box-shadow:4px 4px 0 var(--gold-dark)}
+.btn-yellow{background:var(--yellow);color:var(--black);box-shadow:4px 4px 0 #c09000}
+.btn-ghost{
+  background:transparent;border:1.5px solid #d8d8d8;color:#999;
+  height:42px;max-width:220px;font-size:14px;box-shadow:none}
+.submit-ans-btn{
+  width:100%;height:44px;border-radius:999px;
+  border:2px solid var(--blue);background:rgba(26,86,219,.07);
+  color:var(--blue);font-size:14px;font-weight:900;cursor:pointer;
+  margin-top:10px;transition:background .15s}
+.submit-ans-btn:active{background:rgba(26,86,219,.18)}
+.submit-ans-btn:disabled{opacity:.38;cursor:not-allowed}
+.submit-pass-btn{
+  width:100%;height:44px;border-radius:999px;
+  border:2px solid var(--gold-dark);background:rgba(201,168,76,.10);
+  color:var(--gold-dark);font-size:14px;font-weight:900;cursor:pointer;
+  margin-top:10px;transition:background .15s}
+.submit-pass-btn:active{background:rgba(201,168,76,.22)}
+.submit-pass-btn:disabled{opacity:.38;cursor:not-allowed}
+
+/* ══════════════════════════════════════════
+   PILLS & CARDS
+══════════════════════════════════════════ */
+.pill{
+  display:inline-flex;align-items:center;padding:7px 14px;border-radius:999px;
+  font-size:12px;font-weight:900;letter-spacing:.4px;
+  background:rgba(251,191,22,.18);color:#8a6900;
+  border:1.5px solid rgba(251,191,22,.4);white-space:nowrap}
+.card{
+  background:var(--white);border-radius:var(--radius);
+  box-shadow:var(--shadow);padding:18px;width:100%}
+.section-title{
+  margin:0 0 10px;font-size:15px;font-weight:950;
+  display:flex;align-items:center;gap:8px}
+.muted{color:#555;font-size:13px;line-height:1.78;margin:0}
+ul{margin:0;padding-left:20px}
+li{font-size:13px;line-height:1.78;color:#555}
+.divider{
+  width:calc(100% - 36px);border:none;
+  border-top:2px dashed var(--mid);margin:18px auto}
+.hidden{display:none!important}
+
+/* ══════════════════════════════════════════
+   GATE PAGE MICKEY
+══════════════════════════════════════════ */
+.gate-mickey{
+  position:relative;width:92px;height:83px;margin:0 auto 20px}
+.gate-mickey .ear{
+  width:36px;height:36px;background:var(--black);
+  border:3.5px solid var(--gold);border-radius:50%;
+  position:absolute;top:0}
+.gate-mickey .ear.l{left:3px}
+.gate-mickey .ear.r{right:3px}
+.gate-mickey .head{
+  width:64px;height:64px;background:var(--black);
+  border:3.5px solid var(--gold);border-radius:50%;
+  position:absolute;bottom:0;left:50%;transform:translateX(-50%)}
+
+/* ══════════════════════════════════════════
+   HOME MICKEY
+══════════════════════════════════════════ */
+.big-mickey{
+  position:relative;width:130px;height:118px}
+.big-mickey .ear{
+  width:52px;height:52px;background:var(--black);
+  border:4px solid var(--gold);border-radius:50%;
+  position:absolute;top:0}
+.big-mickey .ear.l{left:5px}
+.big-mickey .ear.r{right:5px}
+.big-mickey .head{
+  width:88px;height:88px;background:var(--black);
+  border:4px solid var(--gold);border-radius:50%;
+  position:absolute;bottom:0;left:50%;transform:translateX(-50%)}
+
+/* ══════════════════════════════════════════
+   CELEBRATE MICKEY
+══════════════════════════════════════════ */
+.celebrate{
+  position:relative;width:160px;height:145px;
+  margin:0 auto 20px;
+  animation:cbounce .9s ease-in-out infinite alternate}
+@keyframes cbounce{
+  from{transform:translateY(0)}to{transform:translateY(-14px)}}
+.celebrate .ear{
+  width:60px;height:60px;border-radius:50%;
+  background:#0d0d0d;border:4px solid var(--gold);
+  position:absolute;top:0}
+.celebrate .ear.l{left:7px;animation:cwiggle 1.4s ease-in-out infinite}
+.celebrate .ear.r{right:7px;animation:cwiggle 1.4s ease-in-out infinite reverse}
+.celebrate .head{
+  width:104px;height:104px;border-radius:50%;
+  background:#0d0d0d;border:4px solid var(--gold);
+  position:absolute;bottom:0;left:50%;transform:translateX(-50%)}
+@keyframes cwiggle{
+  0%,100%{transform:rotate(0)}
+  30%{transform:rotate(-12deg)}70%{transform:rotate(12deg)}}
+
+/* ══════════════════════════════════════════
+   GATE PAGE STYLES
+══════════════════════════════════════════ */
+.gate-hero{
+  width:100%;background:linear-gradient(150deg,#111 0%,#1a1a1a 100%);
+  color:#fff;padding:40px 18px 24px;text-align:center}
+.gate-hero h2{margin:0 0 8px;font-size:26px;font-weight:1000;color:var(--gold)}
+.gate-hero p{margin:0;color:rgba(255,255,255,.65);font-size:13px;line-height:1.65}
+.field-wrap{width:100%;max-width:420px;padding:22px 18px 8px}
+.input{
+  width:100%;height:54px;border-radius:16px;border:2px solid var(--mid);
+  padding:0 16px;font-size:16px;background:#fff;outline:none;
+  box-shadow:0 2px 10px rgba(0,0,0,.06);transition:border-color .2s}
+.input:focus{border-color:rgba(26,86,219,.45)}
+.field-hint{font-size:12px;color:#aaa;margin:8px 6px 0}
+.error-msg{
+  font-size:13px;color:var(--red);font-weight:900;
+  text-align:center;min-height:20px;margin-top:8px}
+
+/* ══════════════════════════════════════════
+   HOME PAGE STYLES
+══════════════════════════════════════════ */
+.home-hero{
+  width:100%;background:var(--black);padding:26px 18px 18px;
+  text-align:center}
+.home-hero h2{
+  margin:8px 0 6px;font-size:32px;font-weight:1000;
+  letter-spacing:2px;color:var(--gold)}
+.home-hero p{margin:0;color:rgba(255,255,255,.65);font-size:13px;line-height:1.65}
+.home-meta{margin:14px auto 0;display:flex;justify-content:center;gap:10px;flex-wrap:wrap}
+.home-wave{width:100%;height:44px;background:var(--black);position:relative}
+.home-wave:after{
+  content:"";position:absolute;bottom:0;left:0;right:0;height:44px;
+  background:var(--light);border-radius:50% 50% 0 0 / 44px}
+.big-mickey-wrap{
+  width:100%;display:flex;justify-content:center;
+  margin-top:-28px;position:relative;z-index:5;pointer-events:none}
+.info-card{border-left:5px solid var(--red)}
+.info-card.blue{border-left-color:var(--blue)}
+.info-card.green{border-left-color:var(--green)}
+.info-card .section-title{color:var(--red)}
+.info-card.blue .section-title{color:var(--blue)}
+.info-card.green .section-title{color:var(--green)}
+
+/* ══════════════════════════════════════════
+   ROUTE PAGE STYLES
+══════════════════════════════════════════ */
+.route-hero{
+  width:100%;padding:36px 18px 24px;
+  background:linear-gradient(135deg,var(--cert-dark),#2d3561);
+  color:#fff;text-align:center}
+.route-hero h2{margin:0 0 6px;font-size:22px;font-weight:1000;color:var(--gold)}
+.route-hero p{margin:0;opacity:.75;font-size:13px}
+.route-card{
+  width:100%;border-radius:18px;background:#fff;border:var(--stroke);
+  box-shadow:var(--shadow-strong);padding:16px 18px;
+  display:flex;align-items:center;gap:14px;cursor:pointer;user-select:none;
+  transition:transform .12s,box-shadow .12s}
+.route-card:active{transform:translate(4px,4px);box-shadow:1px 1px 0 rgba(0,0,0,.88)}
+.route-icon{
+  width:52px;height:52px;border-radius:50%;display:flex;
+  align-items:center;justify-content:center;font-size:24px;flex-shrink:0}
+.route-icon.hk{background:var(--red);color:#fff}
+.route-icon.nt{background:var(--gold);color:var(--black)}
+.route-text h3{margin:0 0 4px;font-size:16px;font-weight:950}
+.route-text p{margin:0;font-size:12px;color:#888}
+
+/* ══════════════════════════════════════════
+   STATION LIST
+══════════════════════════════════════════ */
+.list-hero{
+  width:100%;background:var(--cert-dark);padding:30px 18px 22px;
+  text-align:center;color:#fff}
+.list-hero h2{margin:0 0 6px;font-size:20px;font-weight:1000;color:var(--gold)}
+.list-hero p{margin:0;opacity:.7;font-size:12px}
+.progress-bar-wrap{width:100%;max-width:420px;padding:12px 18px 0}
+.progress-bar-bg{
+  width:100%;height:8px;background:var(--mid);
+  border-radius:999px;overflow:hidden}
+.progress-bar-fill{
+  height:100%;
+  background:linear-gradient(90deg,var(--gold),var(--red));
+  border-radius:999px;transition:width .4s cubic-bezier(.2,.8,.4,1)}
+.progress-label{font-size:12px;color:#888;margin-top:5px;text-align:right}
+.station-item{
+  width:100%;background:#fff;border-radius:16px;
+  border:2px solid var(--mid);padding:14px;
+  display:flex;align-items:center;gap:12px;
+  cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.05);
+  user-select:none;transition:transform .12s,border-color .12s}
+.station-item:active{transform:scale(.985)}
+.station-num{
+  width:40px;height:40px;border-radius:50%;background:var(--red);
+  color:#fff;font-weight:1000;display:flex;align-items:center;
+  justify-content:center;flex-shrink:0;font-size:15px}
+.station-num.done{background:var(--green)}
+.station-title{margin:0;font-size:14px;font-weight:950}
+.station-sub{margin:3px 0 0;font-size:12px;color:#888}
+.arrow{margin-left:auto;color:#ccc;font-size:20px;font-weight:300}
+
+/* ══════════════════════════════════════════
+   STATION DETAIL PAGE
+══════════════════════════════════════════ */
+.back{
+  width:100%;max-width:420px;padding:14px 18px 0;border:none;
+  background:none;color:#888;font-size:13px;cursor:pointer;text-align:left}
+
+/* ══════════════════════════════════════════
+   照片改動 3: aspect-ratio + cover，自然填滿不留白
+══════════════════════════════════════════ */
+.station-img-wrap{
+  width:100%;
+  max-width:420px;
+  overflow:hidden;
+  border-bottom:2px dashed var(--mid);
+  /* 4:3 比例框，貼近大多數手機實拍照片比例 */
+  aspect-ratio:4 / 3;
+}
+.station-img-wrap img{
+  width:100%;
+  height:100%;
+  object-fit:cover;       /* 填滿比例框，邊緣稍微裁切但無留白 */
+  object-position:center; /* 以中心點裁切，最重要的主體保留 */
+  display:block;
+}
+.img-placeholder{
+  width:100%;height:100%;background:var(--mid);
+  display:flex;align-items:center;justify-content:center;
+  color:#8e8e8e;font-size:13px;flex-direction:column;gap:6px}
+.img-placeholder span{font-size:28px}
+.detail-title{margin:0 0 6px;font-size:20px;font-weight:1000;color:var(--cert-dark)}
+.poem-card{
+  background:linear-gradient(140deg,var(--cert-dark),#2d3561);
+  border-radius:var(--radius);padding:20px;width:100%;
+  margin-bottom:14px;text-align:center}
+.poem-text{
+  color:var(--gold);font-size:15px;font-weight:900;
+  line-height:2.1;letter-spacing:1px;font-style:italic;white-space:pre-line}
+
+/* ══════════════════════════════════════════
+   STEP BADGES
+══════════════════════════════════════════ */
+.step-badge{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:5px 12px;border-radius:999px;font-size:11px;
+  font-weight:1000;letter-spacing:1px;margin-bottom:10px}
+.step-badge.step-intro{
+  background:rgba(26,86,219,.10);color:var(--blue);
+  border:1.5px solid rgba(26,86,219,.25)}
+.step-badge.step-task{
+  background:rgba(192,57,43,.10);color:var(--red);
+  border:1.5px solid rgba(192,57,43,.25)}
+.step-badge.step-pass{
+  background:rgba(201,168,76,.15);color:var(--gold-dark);
+  border:1.5px solid rgba(201,168,76,.35)}
+
+/* ══════════════════════════════════════════
+   ANSWER INPUTS
+══════════════════════════════════════════ */
+.answer-input{
+  width:100%;min-height:52px;border-radius:14px;
+  border:2px solid var(--mid);padding:12px 14px;font-size:14px;
+  background:#fff;outline:none;resize:none;
+  transition:border-color .2s;line-height:1.6}
+.answer-input:focus{border-color:rgba(26,86,219,.45)}
+.answer-input.correct-input{border-color:var(--green);background:#e8f8ee}
+.answer-input.wrong-input{
+  border-color:var(--red);background:#fde8e6;
+  animation:wrongShake .3s ease}
+.pass-input{
+  width:100%;height:50px;border-radius:14px;
+  border:2px solid rgba(201,168,76,.5);
+  padding:0 16px;font-size:15px;font-weight:700;
+  background:#fffef5;outline:none;letter-spacing:1px;
+  transition:border-color .2s;color:var(--cert-dark)}
+.pass-input:focus{border-color:var(--gold)}
+.pass-input.correct-input{border-color:var(--green);background:#e8f8ee}
+.pass-input.wrong-input{
+  border-color:var(--red);background:#fde8e6;
+  animation:wrongShake .3s ease}
+
+/* ══════════════════════════════════════════
+   QUIZ OPTIONS (MC)
+══════════════════════════════════════════ */
+.quiz-card{border:var(--stroke);box-shadow:var(--shadow-strong)}
+.q-title{
+  margin:0 0 14px;font-size:15px;font-weight:900;
+  line-height:1.6;color:var(--black);white-space:pre-line}
+.opt{
+  width:100%;padding:12px 14px;margin:6px 0;border-radius:12px;
+  border:2px solid transparent;background:var(--light);
+  cursor:pointer;text-align:left;font-size:14px;
+  transition:transform .1s,background .12s,border-color .12s;
+  user-select:none}
+.opt:active{transform:scale(.99)}
+.opt.correct{background:#e8f8ee;border-color:var(--green);color:#145a32;font-weight:900}
+.opt.wrong{
+  background:#fde8e6;border-color:var(--red);color:#7b1e18;font-weight:700;
+  animation:wrongShake .3s ease}
+.opt.disabled{cursor:not-allowed;opacity:.4;pointer-events:none}
+
+/* ══════════════════════════════════════════
+   FEEDBACK
+══════════════════════════════════════════ */
+.feedback{min-height:22px;margin-top:10px;font-weight:900;text-align:center;font-size:13px;line-height:1.5}
+.feedback.ok{color:var(--green)}
+.feedback.err{color:var(--red)}
+.feedback.lock{color:#7a5c00}
+
+/* ══════════════════════════════════════════
+   TASK DONE BADGES
+══════════════════════════════════════════ */
+.task-done-badge{
+  display:flex;align-items:center;gap:8px;padding:10px 14px;
+  background:#e8f8ee;border:2px solid var(--green);
+  border-radius:12px;color:#145a32;font-size:13px;
+  font-weight:900;margin-top:10px}
+
+/* ══════════════════════════════════════════
+   STEP LOCK / BLUR
+══════════════════════════════════════════ */
+.step-locked{
+  filter:blur(7px);opacity:.4;pointer-events:none;user-select:none;
+  transition:filter .38s ease,opacity .38s ease}
+.step-unlocked{
+  filter:blur(0);opacity:1;pointer-events:auto;user-select:auto;
+  transition:filter .38s ease,opacity .38s ease}
+
+/* ══════════════════════════════════════════
+   STATION LOCK BANNER
+══════════════════════════════════════════ */
+.lock-banner{
+  width:100%;background:rgba(251,191,22,.12);
+  border:1.5px solid rgba(201,168,76,.45);color:#7a5c00;
+  padding:10px 14px;border-radius:14px;
+  font-size:13px;font-weight:900;display:none;margin-bottom:14px}
+#page-station-detail.locked .lock-banner{display:block}
+#page-station-detail.locked #detail-lockable{
+  filter:blur(7px);opacity:.4;pointer-events:none;user-select:none}
+
+/* ══════════════════════════════════════════
+   PASSCODE SECTION CARD
+══════════════════════════════════════════ */
+.pass-card{
+  border:2px solid rgba(201,168,76,.5);
+  box-shadow:0 4px 18px rgba(201,168,76,.12);
+  background:linear-gradient(145deg,#fffef5,#fff9e6)}
+.pass-card-header{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.pass-icon{
+  width:38px;height:38px;border-radius:50%;
+  background:var(--gold);color:#fff;font-size:18px;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.pass-card-title{font-size:15px;font-weight:1000;color:var(--cert-dark)}
+.pass-card-sub{font-size:11px;color:#aaa;margin-top:2px}
+.pass-hint{
+  font-size:12px;color:#a07c20;line-height:1.65;
+  background:rgba(201,168,76,.1);border-radius:10px;
+  padding:10px 12px;margin-bottom:12px}
+
+/* ══════════════════════════════════════════
+   FINISH PAGE
+══════════════════════════════════════════ */
+#page-finish{background:#0d0d0d}
+.finish-inner{
+  min-height:100%;width:100%;
+  display:flex;flex-direction:column;align-items:center;
+  justify-content:center;text-align:center;
+  padding:40px 18px 60px;background:#0d0d0d}
+.finish-title{margin:0 0 8px;font-size:28px;font-weight:1000;color:var(--gold);letter-spacing:2px}
+.finish-sub{margin:0 0 22px;font-size:14px;line-height:1.75;color:rgba(255,255,255,.65)}
+.cert-trigger{
+  width:100%;max-width:340px;border-radius:20px;padding:22px 18px;
+  background:linear-gradient(145deg,var(--cert-dark),#2d3561);
+  border:2px solid rgba(201,168,76,.5);
+  box-shadow:0 0 0 6px rgba(201,168,76,.1),4px 4px 0 rgba(201,168,76,.25);
+  cursor:pointer;user-select:none;transition:transform .12s;
+  margin-bottom:20px;text-align:center}
+.cert-trigger:active{transform:scale(.98)}
+.ct-tag{
+  display:inline-block;margin-top:10px;font-size:11px;font-weight:1000;
+  letter-spacing:1px;color:var(--black);background:var(--gold);
+  padding:5px 14px;border-radius:999px}
+
+/* ══════════════════════════════════════════
+   CERTIFICATE MODAL
+   改動：簽名區重新調整，印章往上移，不遮擋文字
+══════════════════════════════════════════ */
+#cert-modal{
+  position:fixed;top:0;left:0;width:100%;height:100%;
+  display:none;align-items:flex-start;justify-content:center;
+  background:rgba(0,0,0,.92);z-index:200;
+  padding:24px 18px 40px;overflow-y:auto}
+#cert-modal.active{display:flex;flex-direction:column;gap:0}
+#cert-render{
+  width:100%;max-width:380px;background:var(--cert-bg);
+  border-radius:4px;overflow:hidden;
+  box-shadow:0 20px 60px rgba(0,0,0,.5);position:relative}
+.cert-top-bar{
+  width:100%;height:10px;
+  background:linear-gradient(90deg,var(--gold-dark),var(--gold),var(--gold-dark))}
+.cert-header-band{
+  background:var(--cert-dark);padding:24px 28px 20px;
+  text-align:center;position:relative}
+.cert-org-row{
+  display:flex;align-items:center;justify-content:center;
+  gap:10px;margin-bottom:14px}
+.cert-mickey{position:relative;width:38px;height:34px;flex-shrink:0}
+.cert-mickey .ear{
+  width:15px;height:15px;background:transparent;
+  border:2.5px solid var(--gold);border-radius:50%;
+  position:absolute;top:0}
+.cert-mickey .ear.l{left:0}
+.cert-mickey .ear.r{right:0}
+.cert-mickey .head{
+  width:26px;height:26px;background:transparent;
+  border:2.5px solid var(--gold);border-radius:50%;
+  position:absolute;bottom:0;left:50%;transform:translateX(-50%)}
+.cert-org-name{font-size:13px;font-weight:1000;letter-spacing:4px;color:var(--gold);text-transform:uppercase}
+.cert-divider-gold{
+  width:60px;height:2px;
+  background:linear-gradient(90deg,transparent,var(--gold),transparent);
+  margin:0 auto 10px}
+.cert-main-title{font-size:11px;font-weight:900;letter-spacing:5px;color:rgba(255,255,255,.7);text-transform:uppercase;margin-bottom:4px}
+.cert-zh-title{font-size:22px;font-weight:1000;color:#fff;letter-spacing:2px;margin-bottom:0}
+
+.cert-body-section{padding:50px 28px 40px;text-align:center}
+.cert-presents{font-size:10px;letter-spacing:3px;color:#aaa;text-transform:uppercase;margin-bottom:12px}
+.cert-name-display{
+  font-size:26px;font-weight:1000;color:var(--cert-dark);
+  margin-bottom:12px;letter-spacing:1px;
+  border-bottom:2px solid var(--gold);
+  display:inline-block;padding-bottom:6px;min-width:180px}
+.cert-completed-text{font-size:11px;letter-spacing:2px;color:#888;text-transform:uppercase;margin:14px 0 8px}
+.cert-route-display{font-size:16px;font-weight:900;color:var(--cert-dark);margin-bottom:6px}
+.cert-route-en{font-size:10px;color:#aaa;letter-spacing:1px;margin-bottom:0}
+
+/* ══════════════════════════════════════════
+   證書底部：左右欄 + 印章上移修正
+   印章改為 position:absolute 貼在簽名線正上方，
+   文字下移放在印章下方，確保兩者不重疊
+══════════════════════════════════════════ */
+.cert-bottom-row{
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  /* 加大 padding-top 為印章預留足夠空間 */
+  padding:60px 36px 36px;
+  gap:20px;
+  position:relative; /* 讓印章可以用 absolute 定位 */
+}
+
+/* 左側整個簽名欄，需要為印章預留上方空間 */
+.cert-sig-block{
+  text-align:center;
+  flex:1;
+  position:relative;
+  /* 加高最小高度，確保有足夠空間放印章 */
+  min-height:80px;
+  display:flex;
+  flex-direction:column;
+  justify-content:flex-end; /* 文字永遠貼在欄位底部 */
+}
+.cert-sig-line{width:100%;height:1px;background:var(--mid);margin-bottom:8px}
+.cert-sig-name{font-size:11px;font-weight:900;color:var(--cert-dark);letter-spacing:1px}
+.cert-sig-title{font-size:9px;color:#aaa;letter-spacing:.5px;margin-top:3px}
+
+/* 印章：絕對定位在簽名線正上方，不遮擋文字 */
+.cert-stamp-overlay{
+  position:absolute;
+  /* 從簽名線上方算起，讓印章懸浮在線的正上方 */
+  bottom:52px; /* 約等於簽名線 + 文字高度，讓印章底部貼近簽名線頂部 */
+  left:50%;
+  transform:translateX(-50%) rotate(-12deg);
+  opacity:.82;
+  pointer-events:none;
+}
+.cert-stamp-mickey{
+  position:relative;width:64px;height:58px;
+}
+.cert-stamp-mickey .s-ear{
+  width:25px;height:25px;border-radius:50%;
+  border:2.5px solid var(--red);background:transparent;
+  position:absolute;top:0}
+.cert-stamp-mickey .s-ear.l{left:1px}
+.cert-stamp-mickey .s-ear.r{right:1px}
+.cert-stamp-mickey .s-head{
+  width:42px;height:42px;border-radius:50%;
+  border:2.5px solid var(--red);
+  background:rgba(250,250,247,0.6);
+  position:absolute;bottom:0;left:50%;transform:translateX(-50%);
+  display:flex;align-items:center;justify-content:center;
+  flex-direction:column;gap:0}
+.cert-stamp-text{
+  font-size:6.5px;font-weight:1000;
+  color:var(--red);letter-spacing:.3px;
+  line-height:1.5;text-align:center}
+
+.cert-bottom-bar{
+  width:100%;height:8px;
+  background:linear-gradient(90deg,var(--gold-dark),var(--gold),var(--gold-dark))}
+.cert-btns{
+  width:100%;max-width:380px;display:flex;gap:10px;
+  justify-content:center;margin-top:16px;flex-wrap:wrap}
+.btn-mini{
+  height:44px;max-width:175px;flex:1;font-size:14px;
+  box-shadow:none;border-radius:999px;border:none;
+  font-weight:900;cursor:pointer;transition:opacity .15s}
+.btn-mini:active{opacity:.75}
+.btn-dark{background:var(--cert-dark);color:#fff}
+.btn-outline-light{
+  background:transparent;
+  border:2px solid rgba(255,255,255,.25);color:rgba(255,255,255,.75)}
+
+  </style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══════════════════════════════════════
+     HEADER
+═══════════════════════════════════════ -->
+<header>
+  <div class="header-tap" onclick="goHome()">
+    <div class="hd-mickey">
+      <div class="hm-ear l"></div>
+      <div class="hm-ear r"></div>
+      <div class="hm-head"></div>
+    </div>
+    <h1>MAVIS 城市定向</h1>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════
+     PAGE: GATE
+═══════════════════════════════════════ -->
+<section id="page-gate" class="page active">
+  <div class="page-inner">
+    <div class="gate-hero">
+      <div class="gate-mickey">
+        <div class="ear l"></div><div class="ear r"></div><div class="head"></div>
+      </div>
+      <h2>歡迎參加！</h2>
+      <p>請先輸入你的姓名或別名<br>將顯示於最後的完成證書</p>
+    </div>
+    <div class="field-wrap">
+      <input id="player-name" class="input" type="text" maxlength="20"
+             placeholder="例如：阿明 / MavisFan"
+             autocomplete="name"
+             onkeydown="if(event.key==='Enter')enterSite()"/>
+      <div class="field-hint">最多 20 字，可輸入暱稱</div>
+      <div id="gate-error" class="error-msg"></div>
+    </div>
+    <div class="container" style="padding-top:10px;display:flex;
+         flex-direction:column;align-items:center">
+      <button class="btn btn-gold" onclick="enterSite()">✅ 進入主頁</button>
+      <p style="font-size:11px;color:#aaa;margin-top:14px;
+         text-align:center;padding:0 18px;line-height:1.7">
+        ⚡ 建議備妥行動電源及充足流量<br>活動全程約 4 小時
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════
+     PAGE: HOME
+═══════════════════════════════════════ -->
+<section id="page-home" class="page">
+  <div class="page-inner">
+    <div class="home-hero">
+      <div class="home-meta">
+        <span class="pill">📅 日期：2026 / 02 / 28</span>
+        <span class="pill">🕐 時間：14:00 – 18:30</span>
+      </div>
+      <h2>城市定向</h2>
+      <p>探索城市角落，找到站點地標，完成觀察挑戰</p>
+    </div>
+    <div class="home-wave"></div>
+    <div class="big-mickey-wrap" aria-hidden="true">
+      <div class="big-mickey">
+        <div class="ear l"></div><div class="ear r"></div><div class="head"></div>
+      </div>
+    </div>
+    <div class="container" style="padding-top:12px">
+      <div class="card info-card">
+        <h3 class="section-title">🗺️ 關於活動</h3>
+        <p class="muted">活動以「找到地標」為核心：到達每個站點後，先完成引子觀察，再挑戰通關任務，最後向導師展示合照並換取通關密語，全部完成方可前進下一個站點。</p>
+      </div>
+      <div class="card info-card blue" style="margin-top:14px">
+        <h3 class="section-title">🎯 每站三步流程</h3>
+        <ul>
+          <li>📖 <strong>第一步：引子問題</strong>——到達站點後完成觀察題。</li>
+          <li>🏆 <strong>第二步：通關任務</strong>——完成主要挑戰問答。</li>
+          <li>🔑 <strong>第三步：通關密語</strong>——向導師出示合照換取密語，輸入正確方可解鎖下一站。</li>
+        </ul>
+      </div>
+      <div class="card info-card green" style="margin-top:14px">
+        <h3 class="section-title">⚠️ 注意事項</h3>
+        <ul>
+          <li>請注意個人安全，切勿進入禁止區域。</li>
+          <li>保持環境整潔，不要亂拋垃圾。</li>
+          <li>遇到緊急情況請立即聯絡負責人。</li>
+          <li>請帶備足夠飲用水，並適時補水。</li>
+          <li>建議塗抹防曬、戴帽；留意天氣與體感溫度。</li>
+          <li>小心路面情況，留意交通。</li>
+          <li>如感到不適請立即休息並通知負責人。</li>
+        </ul>
+      </div>
+      <div style="margin-top:20px;display:flex;justify-content:center">
+        <button class="btn btn-gold" onclick="goToPage('page-routes')">
+          🚀 開始挑戰
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════
+     PAGE: ROUTES
+═══════════════════════════════════════ -->
+<section id="page-routes" class="page">
+  <div class="page-inner">
+    <div class="route-hero">
+      <h2>選擇路線</h2>
+      <p>可瀏覽所有站點，但任務需逐站解鎖完成</p>
+    </div>
+    <div class="container" style="display:flex;flex-direction:column;gap:14px">
+      <div class="route-card" onclick="selectRoute('hk')">
+        <div class="route-icon hk">🏙️</div>
+        <div class="route-text">
+          <h3>A 組：港島舊時光線</h3>
+          <p>9 個站點・筲箕灣 → 灣仔</p>
+        </div>
+        <div class="arrow">›</div>
+      </div>
+      <div class="route-card" onclick="selectRoute('nt')">
+        <div class="route-icon nt">🚂</div>
+        <div class="route-text">
+          <h3>B 組：東鐵文脈線</h3>
+          <p>9 個站點・上水 → 旺角</p>
+        </div>
+        <div class="arrow">›</div>
+      </div>
+      <div style="display:flex;justify-content:center;margin-top:6px">
+        <button class="btn btn-ghost" onclick="goToPage('page-home')">
+          ← 返回首頁
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════
+     PAGE: STATION LIST
+═══════════════════════════════════════ -->
+<section id="page-station-list" class="page">
+  <div class="page-inner">
+    <div class="list-hero">
+      <h2 id="list-route-name">路線</h2>
+      <p id="list-route-sub">共 9 個站點</p>
+    </div>
+    <div class="progress-bar-wrap">
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" id="list-progress-fill"
+             style="width:0%"></div>
+      </div>
+      <div class="progress-label" id="list-progress-label">0 / 9 完成</div>
+    </div>
+    <div class="container" id="station-list-container"
+         style="display:flex;flex-direction:column;gap:12px"></div>
+    <div class="container" style="padding-top:0;display:flex;justify-content:center">
+      <button class="btn btn-ghost" onclick="goToPage('page-routes')">
+        ← 返回路線選擇
+      </button>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════
+     PAGE: STATION DETAIL
+═══════════════════════════════════════ -->
+<section id="page-station-detail" class="page">
+  <div class="page-inner">
+    <button class="back" onclick="goToPage('page-station-list')">
+      ← 返回站點列表
+    </button>
+
+    <div class="station-img-wrap">
+      <div class="img-placeholder" id="detail-img-placeholder">
+        <span>📷</span>
+        <span id="detail-img-alt">站點圖片</span>
+      </div>
+      <img id="detail-img" src="" alt="" style="display:none"/>
+    </div>
+
+    <div class="container" style="padding-top:14px">
+
+      <div class="card" style="margin-bottom:14px">
+        <h2 class="detail-title" id="detail-name">站點名稱</h2>
+        <p class="muted" id="detail-destination">目的地：—</p>
+      </div>
+
+      <div class="poem-card">
+        <div class="poem-text" id="detail-poem">—</div>
+      </div>
+
+      <div class="card" style="margin-bottom:14px">
+        <h3 class="section-title">📌 地點簡介</h3>
+        <p class="muted" id="detail-desc">—</p>
+      </div>
+
+      <div id="lock-banner" class="lock-banner">
+        🔒 未解鎖：請先完成上一個站點的全部任務
+      </div>
+
+      <div id="detail-lockable">
+
+        <!-- STEP 1: INTRO -->
+        <div class="card" id="intro-card" style="margin-bottom:14px">
+          <div class="step-badge step-intro">📖 第一步：引子問題</div>
+          <h3 class="q-title" id="intro-q">引子問題…</h3>
+          <div id="intro-answer-wrap">
+            <textarea class="answer-input" id="intro-answer-input"
+                      placeholder="請輸入答案…" rows="2"></textarea>
+            <button class="submit-ans-btn" id="intro-submit-btn"
+                    onclick="submitIntroAnswer()">
+              確認答案 →
+            </button>
+            <div id="intro-feedback" class="feedback"></div>
+          </div>
+          <div id="intro-done-badge" class="task-done-badge hidden">
+            ✅ 引子問題已完成
+          </div>
+        </div>
+
+        <!-- STEP 2: MAIN TASK -->
+        <div id="task-card-wrap" class="step-locked">
+          <div class="card quiz-card" style="margin-bottom:14px">
+            <div class="step-badge step-task">🏆 第二步：通關任務</div>
+            <h3 class="q-title" id="quiz-q">題目…</h3>
+
+            <div id="quiz-options-wrap"></div>
+
+            <div id="quiz-open-wrap" class="hidden">
+              <textarea class="answer-input" id="quiz-answer-input"
+                        placeholder="請輸入通關答案…" rows="2"></textarea>
+              <button class="submit-ans-btn" id="quiz-submit-btn"
+                      onclick="submitQuizAnswer()">
+                確認通關答案 →
+              </button>
+            </div>
+
+            <div id="quiz-feedback" class="feedback"></div>
+            <div id="quiz-done-badge" class="task-done-badge hidden">
+              ✅ 通關任務已完成
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 3: PASSCODE -->
+        <div id="pass-card-wrap" class="step-locked">
+          <div class="card pass-card" style="margin-bottom:14px">
+            <div class="pass-card-header">
+              <div class="pass-icon">🔑</div>
+              <div>
+                <div class="pass-card-title">第三步：通關密語</div>
+                <div class="pass-card-sub">Passcode · Station Unlock</div>
+              </div>
+            </div>
+            <div class="pass-hint">
+              📸 請先完成本站合照任務：<br>
+              <strong id="pass-pose-hint">擺出指定姿勢拍攝合照</strong><br><br>
+              完成後向導師出示合照，換取本站通關密語，輸入下方文字框。
+            </div>
+            <input class="pass-input" id="pass-input"
+                   type="text" maxlength="30"
+                   placeholder="輸入通關密語…"
+                   autocomplete="off"
+                   onkeydown="if(event.key==='Enter')submitPasscode()"/>
+            <button class="submit-pass-btn" id="pass-submit-btn"
+                    onclick="submitPasscode()">
+              🔓 解鎖下一站 →
+            </button>
+            <div id="pass-feedback" class="feedback"></div>
+            <div id="pass-done-badge" class="task-done-badge hidden">
+              ✅ 通關密語正確，已解鎖！
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;
+               align-items:center;gap:12px;padding-bottom:28px">
+            <button id="btn-next-station" class="btn btn-gold hidden"
+                    onclick="goNextStation()">
+              前往下一站 ➡️
+            </button>
+            <button id="btn-finish" class="btn btn-red hidden"
+                    onclick="goToFinish()">
+              🎉 完成全線挑戰！
+            </button>
+          </div>
+        </div>
+
+      </div><!-- /detail-lockable -->
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════
+     PAGE: FINISH
+═══════════════════════════════════════ -->
+<section id="page-finish" class="page">
+  <div class="page-inner" style="background:#0d0d0d">
+    <div class="finish-inner">
+      <div style="font-size:28px;letter-spacing:6px;margin-bottom:16px">
+        🎊 🌟 🎉
+      </div>
+      <div class="celebrate" aria-hidden="true">
+        <div class="ear l"></div><div class="ear r"></div><div class="head"></div>
+      </div>
+      <h2 class="finish-title">挑戰完成！</h2>
+      <p class="finish-sub" id="finish-msg">恭喜你完成所有站點！</p>
+      <p style="color:rgba(255,255,255,.5);font-size:13px;margin:0 0 24px;line-height:2">
+        📍 前往終點<br>
+        <span style="font-size:16px;font-weight:1000;color:var(--gold);letter-spacing:.5px">
+          22.317248, 114.156151
+        </span><br>
+        <span style="font-size:11px;opacity:.65">
+          奧運站 A 出口 → 海輝道公園，步行約 5 分鐘
+        </span>
+      </p>
+      <div class="cert-trigger" onclick="openCert()">
+        <div style="font-size:32px">🏅</div>
+        <div style="font-size:15px;font-weight:1000;color:var(--gold);margin:8px 0 4px">
+          點擊領取完成證書
+        </div>
+        <p style="font-size:12px;color:rgba(255,255,255,.55);margin:0">
+          Certificate of Completion
+        </p>
+        <span class="ct-tag">點擊開啟 ›</span>
+      </div>
+      <button class="btn btn-ghost" onclick="goToPage('page-home')"
+              style="color:rgba(255,255,255,.55);border-color:rgba(255,255,255,.2)">
+        🏠 返回首頁
+      </button>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════
+     CERTIFICATE MODAL
+═══════════════════════════════════════ -->
+<div id="cert-modal" onclick="handleModalBgClick(event)">
+
+  <div id="cert-render">
+    <div class="cert-top-bar"></div>
+    <div class="cert-header-band">
+      <div class="cert-org-row">
+        <div class="cert-mickey">
+          <div class="ear l"></div><div class="ear r"></div><div class="head"></div>
+        </div>
+        <div class="cert-org-name">MAVIS</div>
+        <div class="cert-mickey">
+          <div class="ear l"></div><div class="ear r"></div><div class="head"></div>
+        </div>
+      </div>
+      <div class="cert-divider-gold"></div>
+      <div class="cert-main-title">Certificate of Completion</div>
+      <div class="cert-zh-title">完 成 證 書</div>
+    </div>
+
+    <div class="cert-body-section">
+      <div class="cert-presents">This certifies that</div>
+      <div class="cert-name-display" id="cert-name">（姓名）</div>
+      <div class="cert-completed-text">has successfully completed</div>
+      <div class="cert-route-display" id="cert-route">（路線名稱）</div>
+      <div class="cert-route-en" id="cert-route-en">Urban Orienteering Challenge</div>
+    </div>
+
+    <!-- 底部左右兩欄，左側印章疊在簽名線上方 -->
+    <div class="cert-bottom-row">
+
+      <!-- 左欄：CEO MAVIS + 印章 -->
+      <div class="cert-sig-block">
+        <!-- 印章懸浮在簽名線正上方，文字在下方 -->
+        <div class="cert-stamp-overlay">
+          <div class="cert-stamp-mickey">
+            <div class="s-ear l"></div>
+            <div class="s-ear r"></div>
+            <div class="s-head">
+              <span class="cert-stamp-text">MAVIS<br>認證<br>✦</span>
+            </div>
+          </div>
+        </div>
+        <div class="cert-sig-line"></div>
+        <div class="cert-sig-name">CEO: MAVIS</div>
+        <div class="cert-sig-title">Programme Director</div>
+      </div>
+
+      <!-- 右欄：日期 -->
+      <div class="cert-sig-block">
+        <div class="cert-sig-line"></div>
+        <div class="cert-sig-name" id="cert-date-label">2026年2月28日</div>
+        <div class="cert-sig-title">Date of Completion</div>
+      </div>
+
+    </div>
+
+    <div class="cert-bottom-bar"></div>
+  </div>
+
+  <div class="cert-btns" onclick="event.stopPropagation()">
+    <button class="btn-mini btn-dark" onclick="downloadPDF()">
+      ⬇ 下載 PDF
+    </button>
+    <button class="btn-mini btn-outline-light" onclick="closeCert()">
+      收起
+    </button>
+  </div>
+
+</div><!-- /cert-modal -->
+
+</div><!-- /app -->
+<script>
+/* ============================================================
+   PART D — STATE, PERSISTENCE, CORE LOGIC
+   ============================================================ */
+
+const state = {
+  playerName   : '',
+  routeKey     : null,
+  stationIndex : 0,
+  progress     : { hk: 0, nt: 0 },
+  stepDone     : { hk: {}, nt: {} },
+  activePage   : 'page-gate'
+};
+
+const LS_KEY = 'mavis_save_v4';
+
+function saveProgress(){
+  try{
+    localStorage.setItem(LS_KEY, JSON.stringify({
+      playerName   : state.playerName,
+      routeKey     : state.routeKey,
+      stationIndex : state.stationIndex,
+      progress     : state.progress,
+      stepDone     : state.stepDone,
+      activePage   : state.activePage
+    }));
+  } catch(e){ console.warn('Save failed',e); }
+}
+
+function loadProgress(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(!raw) return false;
+    const s = JSON.parse(raw);
+    if(s.playerName)                 state.playerName   = s.playerName;
+    if(s.routeKey)                   state.routeKey     = s.routeKey;
+    if(s.stationIndex !== undefined) state.stationIndex = s.stationIndex;
+    if(s.progress)                   state.progress     = Object.assign({hk:0,nt:0}, s.progress);
+    if(s.stepDone)                   state.stepDone     = Object.assign({hk:{},nt:{}}, s.stepDone);
+    if(s.activePage)                 state.activePage   = s.activePage;
+    return true;
+  } catch(e){ console.warn('Load failed',e); return false; }
+}
+
+/* ── Step Helpers ── */
+function getStep(routeKey, idx){
+  if(!state.stepDone[routeKey])      state.stepDone[routeKey]      = {};
+  if(!state.stepDone[routeKey][idx]) state.stepDone[routeKey][idx] = {intro:false,quiz:false,passcode:false};
+  return state.stepDone[routeKey][idx];
+}
+
+function markStep(routeKey, idx, step){
+  const s = getStep(routeKey, idx);
+  s[step] = true;
+  if(s.intro && s.quiz && s.passcode){
+    if(state.progress[routeKey] < idx + 1)
+      state.progress[routeKey] = idx + 1;
+  }
+  saveProgress();
+}
+
+function allStepsDone(routeKey, idx){
+  const s = getStep(routeKey, idx);
+  return s.intro && s.quiz && s.passcode;
+}
+
+/* ══════════════════════════════════════════
+   ENHANCED NORMALISE
+══════════════════════════════════════════ */
+function normalise(str){
+  return String(str)
+    .toLowerCase()
+    .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+    .replace(/^[\s]*[0-9一二三四五六七八九十]+[\.、）)]\s*/gm, '')
+    .replace(/\s+/g, '')
+    .replace(/[，。！？,.!?「」『』／/\-–—()（）:：;；、～~]/g, '')
+    .replace(/[艘個朵分鐘元港幣$＄]/g, '')
+    .replace(/hk/gi, '')
+    .trim();
+}
+
+/* ══════════════════════════════════════════
+   ENHANCED CHECK ANSWER
+══════════════════════════════════════════ */
+function checkAnswer(input, correct){
+  const trimmed = input.trim();
+  if(!trimmed) return false;
+
+  if(!correct || correct === 'OPEN' || correct === 'PENDING')
+    return true;
+
+  if(correct.startsWith('RANGE:')){
+    const parts = correct.replace('RANGE:','').split('-');
+    const min = parseFloat(parts[0]);
+    const max = parseFloat(parts[1]);
+    const num = parseFloat(trimmed.replace(/[^0-9.]/g,''));
+    return !isNaN(num) && num >= min && num <= max;
+  }
+
+  if(correct.startsWith('KEYWORDS:')){
+    const keys = correct.replace('KEYWORDS:','').split(',');
+    const normInput = normalise(trimmed);
+    return keys.some(k => normInput.includes(normalise(k)));
+  }
+
+  const normInput = normalise(trimmed);
+  const strippedInput = trimmed
+    .replace(/^[\s]*[0-9一二三四五六七八九十]+[\.、）)]\s*/gm, '')
+    .replace(/\s+/g,'');
+  const normStripped = normalise(strippedInput);
+
+  return correct.split('|').some(c => {
+    const normC = normalise(c);
+    return normInput === normC || normStripped === normC
+      || normInput.includes(normC)
+      || normStripped.includes(normC);
+  });
+}
+
+/* ── Page Transition ── */
+function goToPage(id){
+  const cur = document.querySelector('.page.active');
+  const nxt = document.getElementById(id);
+  if(!nxt || cur === nxt) return;
+  state.activePage = id;
+  saveProgress();
+  if(cur){
+    cur.classList.add('exiting');
+    setTimeout(()=>{
+      cur.classList.remove('active','exiting');
+      nxt.classList.add('active');
+      nxt.scrollTop = 0;
+      window.scrollTo(0, 0);
+    }, 200);
+  } else {
+    nxt.classList.add('active');
+    nxt.scrollTop = 0;
+    window.scrollTo(0, 0);
+  }
+}
+
+function goHome(){
+  goToPage(state.playerName ? 'page-home' : 'page-gate');
+}
+
+/* ── Gate Enter ── */
+function enterSite(){
+  const input = document.getElementById('player-name');
+  const errEl = document.getElementById('gate-error');
+  const name  = input.value.trim();
+  if(!name){
+    errEl.textContent = '⚠️ 請先輸入姓名或別名才能開始！';
+    const wrap = document.querySelector('.field-wrap');
+    wrap.classList.remove('shake'); void wrap.offsetWidth;
+    wrap.classList.add('shake');
+    input.focus(); return;
+  }
+  errEl.textContent = '';
+  state.playerName  = name;
+  state.activePage  = 'page-home';
+  saveProgress();
+  goToPage('page-home');
+}
+
+/* ── 圖片預載入 ── */
+function preloadRouteImages(key){
+  if(!routesData[key] || !routesData[key].stations) return;
+  routesData[key].stations.forEach(s => {
+    if(s.imgUrl){
+      const img = new Image();
+      img.src = s.imgUrl;
+    }
+  });
+}
+
+/* ── Route Select ── */
+function selectRoute(key){
+  state.routeKey     = key;
+  state.stationIndex = 0;
+  state.activePage   = 'page-station-list';
+  saveProgress();
+  preloadRouteImages(key);
+  const data = routesData[key];
+  document.getElementById('list-route-name').textContent = data.name;
+  document.getElementById('list-route-sub').textContent  = data.sub;
+  renderStationList(key);
+  goToPage('page-station-list');
+}
+
+/* ── Render Station List ── */
+function renderStationList(key){
+  const data  = routesData[key];
+  const done  = state.progress[key];
+  const total = data.stations.length;
+  const c     = document.getElementById('station-list-container');
+  c.innerHTML = '';
+  const pct   = Math.round((done / total) * 100);
+  document.getElementById('list-progress-fill').style.width  = pct + '%';
+  document.getElementById('list-progress-label').textContent = `${done} / ${total} 完成`;
+  data.stations.forEach((s, i)=>{
+    const locked   = i > 0 && done < i;
+    const finished = allStepsDone(key, i);
+    const el       = document.createElement('div');
+    el.className   = 'station-item';
+    el.onclick     = ()=> openStation(i);
+    const numEl    = document.createElement('div');
+    numEl.className   = 'station-num' + (finished ? ' done' : '');
+    numEl.textContent = finished ? '✓' : (i + 1);
+    const textWrap    = document.createElement('div');
+    textWrap.style.flex = '1';
+    textWrap.innerHTML  = `
+      <p class="station-title">${s.name}</p>
+      <p class="station-sub">${
+        finished ? '✅ 全部完成'
+        : locked  ? '🔒 未解鎖'
+        : '🔓 可作答'
+      }</p>`;
+    const arrow       = document.createElement('div');
+    arrow.className   = 'arrow';
+    arrow.textContent = '›';
+    el.appendChild(numEl);
+    el.appendChild(textWrap);
+    el.appendChild(arrow);
+    c.appendChild(el);
+  });
+}
+
+/* ── Open Station ── */
+function openStation(idx){
+  state.stationIndex = idx;
+  state.activePage   = 'page-station-detail';
+  saveProgress();
+
+  const key      = state.routeKey;
+  const s        = routesData[key].stations[idx];
+  const done     = state.progress[key];
+  const unlocked = (idx === 0) || (done >= idx);
+  const steps    = getStep(key, idx);
+
+  document.getElementById('detail-name').textContent        = s.name;
+  document.getElementById('detail-destination').textContent = '目的地：' + s.destination;
+  document.getElementById('detail-poem').textContent        = s.poem  || '—';
+  document.getElementById('detail-desc').textContent        = s.desc  || '—';
+  document.getElementById('pass-pose-hint').textContent     = s.poseHint || '擺出指定姿勢拍攝合照';
+
+  const imgEl = document.getElementById('detail-img');
+  const phEl  = document.getElementById('detail-img-placeholder');
+  document.getElementById('detail-img-alt').textContent = s.imgAlt || '📷 站點圖片';
+  if(s.imgUrl){
+    imgEl.src = s.imgUrl; imgEl.alt = s.imgAlt || '';
+    imgEl.style.display = 'block'; phEl.style.display = 'none';
+  } else {
+    imgEl.style.display = 'none'; phEl.style.display = 'flex';
+  }
+
+  /* STEP 1 — INTRO */
+  document.getElementById('intro-q').textContent = s.intro.q || '—';
+  const introInput  = document.getElementById('intro-answer-input');
+  const introSubmit = document.getElementById('intro-submit-btn');
+  const introDone   = document.getElementById('intro-done-badge');
+  const introWrap   = document.getElementById('intro-answer-wrap');
+  introInput.value = '';
+  setFb('intro-feedback','','');
+  if(steps.intro){
+    introInput.className = 'answer-input correct-input';
+    introInput.disabled  = true;
+    introSubmit.disabled = true;
+    introDone.classList.remove('hidden');
+    introWrap.style.opacity = '.55';
+  } else {
+    introInput.className = 'answer-input';
+    introInput.disabled  = false;
+    introSubmit.disabled = false;
+    introDone.classList.add('hidden');
+    introWrap.style.opacity = '1';
+  }
+
+  /* STEP 2 — QUIZ */
+  const taskWrap  = document.getElementById('task-card-wrap');
+  const quizWrap  = document.getElementById('quiz-options-wrap');
+  const openWrap  = document.getElementById('quiz-open-wrap');
+  const quizDone  = document.getElementById('quiz-done-badge');
+  quizWrap.innerHTML = '';
+  setFb('quiz-feedback','','');
+
+  const isMC = (s.quiz.type === 'mc');
+  document.getElementById('quiz-q').textContent = s.quiz.q || '—';
+
+  if(isMC){
+    openWrap.classList.add('hidden');
+    quizWrap.style.display = '';
+  } else {
+    quizWrap.style.display = 'none';
+    openWrap.classList.remove('hidden');
+    const qi = document.getElementById('quiz-answer-input');
+    const qs = document.getElementById('quiz-submit-btn');
+    qi.value = '';
+    if(steps.quiz){
+      qi.className = 'answer-input correct-input';
+      qi.disabled  = true; qs.disabled = true;
+    } else {
+      qi.className = 'answer-input';
+      qi.disabled  = false; qs.disabled = false;
+    }
+  }
+
+  if(steps.quiz){
+    quizDone.classList.remove('hidden');
+    if(isMC){
+      const btn = document.createElement('button');
+      btn.className   = 'opt correct';
+      btn.textContent = '✅ ' + s.quiz.ans;
+      btn.disabled    = true;
+      quizWrap.appendChild(btn);
+    }
+  } else {
+    quizDone.classList.add('hidden');
+    if(isMC) renderQuizOptions(s);
+  }
+
+  /* STEP 3 — PASSCODE */
+  const passWrap   = document.getElementById('pass-card-wrap');
+  const passInput  = document.getElementById('pass-input');
+  const passSubmit = document.getElementById('pass-submit-btn');
+  const passDone   = document.getElementById('pass-done-badge');
+  passInput.value  = '';
+  setFb('pass-feedback','','');
+  if(steps.passcode){
+    passInput.className = 'pass-input correct-input';
+    passInput.disabled  = true;
+    passSubmit.disabled = true;
+    passDone.classList.remove('hidden');
+  } else {
+    passInput.className = 'pass-input';
+    passInput.disabled  = false;
+    passSubmit.disabled = false;
+    passDone.classList.add('hidden');
+  }
+
+  setBlur(taskWrap, !steps.intro);
+  setBlur(passWrap, !(steps.intro && steps.quiz));
+
+  checkAllStepsAndRevealNext(key, idx);
+  applyStationLock(!unlocked);
+
+  goToPage('page-station-detail');
+}
+
+/* ── Blur Helper ── */
+function setBlur(el, shouldBlur){
+  if(!el) return;
+  if(shouldBlur){
+    el.classList.remove('step-unlocked');
+    el.classList.add('step-locked');
+  } else {
+    el.classList.remove('step-locked');
+    el.classList.add('step-unlocked');
+  }
+}
+
+/* ── Station Lock ── */
+function applyStationLock(lock){
+  const page   = document.getElementById('page-station-detail');
+  const banner = document.getElementById('lock-banner');
+  lock
+    ? (page.classList.add('locked'),    banner.style.display = 'block')
+    : (page.classList.remove('locked'), banner.style.display = 'none');
+}
+
+/* ── Feedback Helper ── */
+function setFb(id, text, cls){
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.textContent = text;
+  el.className   = 'feedback' + (cls ? ' '+cls : '');
+}
+
+/* ── Render MC Options ── */
+function renderQuizOptions(s){
+  const wrap     = document.getElementById('quiz-options-wrap');
+  const shuffled = shuffleArr([...s.quiz.options]);
+  ['A','B','C','D'].forEach((ltr, i)=>{
+    if(i >= shuffled.length) return;
+    const btn       = document.createElement('button');
+    btn.className   = 'opt';
+    btn.dataset.val = shuffled[i];
+    btn.textContent = `${ltr}.  ${shuffled[i]}`;
+    btn.onclick     = ()=> handleMCAnswer(btn, s.quiz.ans);
+    wrap.appendChild(btn);
+  });
+}
+
+/* ── STEP 1: Submit Intro ── */
+function submitIntroAnswer(){
+  const key   = state.routeKey;
+  const idx   = state.stationIndex;
+  const s     = routesData[key].stations[idx];
+  const input = document.getElementById('intro-answer-input');
+  const val   = input.value.trim();
+  if(!val){
+    input.classList.add('wrong-input');
+    setTimeout(()=> input.classList.remove('wrong-input'), 400);
+    setFb('intro-feedback','⚠️ 請先輸入答案','err'); return;
+  }
+  if(checkAnswer(val, s.intro.ans)){
+    input.className = 'answer-input correct-input';
+    input.disabled  = true;
+    document.getElementById('intro-submit-btn').disabled = true;
+    document.getElementById('intro-done-badge').classList.remove('hidden');
+    document.getElementById('intro-answer-wrap').style.opacity = '.55';
+    setFb('intro-feedback','✅ 引子問題完成！','ok');
+    markStep(key, idx, 'intro');
+    setBlur(document.getElementById('task-card-wrap'), false);
+    checkAllStepsAndRevealNext(key, idx);
+  } else {
+    input.classList.remove('correct-input');
+    input.classList.add('wrong-input');
+    setTimeout(()=> input.classList.remove('wrong-input'), 400);
+    setFb('intro-feedback','❌ 答案不對，請再仔細觀察！','err');
+  }
+}
+
+/* ── STEP 2: MC Answer ── */
+function handleMCAnswer(btn, correct){
+  const key = state.routeKey;
+  const idx = state.stationIndex;
+  const normBtn     = normalise(btn.dataset.val);
+  const normCorrect = normalise(correct);
+  const isCorrect   = normBtn === normCorrect
+    || normBtn.includes(normCorrect)
+    || normCorrect.includes(normBtn)
+    || (correct.length <= 2 && normalise(btn.textContent).startsWith(normalise(correct)));
+  if(isCorrect){
+    btn.classList.add('correct');
+    document.querySelectorAll('.opt').forEach(b=>{
+      b.onclick = null;
+      if(b !== btn) b.classList.add('disabled');
+    });
+    setFb('quiz-feedback','✅ 答對了！通關任務完成。','ok');
+    document.getElementById('quiz-done-badge').classList.remove('hidden');
+    markStep(key, idx, 'quiz');
+    setBlur(document.getElementById('pass-card-wrap'), false);
+    checkAllStepsAndRevealNext(key, idx);
+  } else {
+    btn.classList.add('wrong');
+    setFb('quiz-feedback','❌ 答錯了，請再試！','err');
+    setTimeout(()=> btn.classList.remove('wrong'), 400);
+  }
+}
+
+/* ── STEP 2: Open Answer ── */
+function submitQuizAnswer(){
+  const key   = state.routeKey;
+  const idx   = state.stationIndex;
+  const s     = routesData[key].stations[idx];
+  const input = document.getElementById('quiz-answer-input');
+  const val   = input.value.trim();
+  if(!val){
+    input.classList.add('wrong-input');
+    setTimeout(()=> input.classList.remove('wrong-input'), 400);
+    setFb('quiz-feedback','⚠️ 請先輸入答案','err'); return;
+  }
+  if(checkAnswer(val, s.quiz.ans)){
+    input.className = 'answer-input correct-input';
+    input.disabled  = true;
+    document.getElementById('quiz-submit-btn').disabled = true;
+    document.getElementById('quiz-done-badge').classList.remove('hidden');
+    setFb('quiz-feedback','✅ 通關任務完成！','ok');
+    markStep(key, idx, 'quiz');
+    setBlur(document.getElementById('pass-card-wrap'), false);
+    checkAllStepsAndRevealNext(key, idx);
+  } else {
+    input.classList.remove('correct-input');
+    input.classList.add('wrong-input');
+    setTimeout(()=> input.classList.remove('wrong-input'), 400);
+    setFb('quiz-feedback','❌ 答案不對，請再試！','err');
+  }
+}
+
+/* ── STEP 3: Passcode ── */
+function submitPasscode(){
+  const key   = state.routeKey;
+  const idx   = state.stationIndex;
+  const s     = routesData[key].stations[idx];
+  const input = document.getElementById('pass-input');
+  const val   = input.value.trim();
+  if(!val){
+    input.classList.add('wrong-input');
+    setTimeout(()=> input.classList.remove('wrong-input'), 400);
+    setFb('pass-feedback','⚠️ 請輸入通關密語','err'); return;
+  }
+  const norm = str => str.toLowerCase().replace(/\s+/g,'');
+  if(norm(val) === norm(s.passcode || '')){
+    input.className = 'pass-input correct-input';
+    input.disabled  = true;
+    document.getElementById('pass-submit-btn').disabled = true;
+    document.getElementById('pass-done-badge').classList.remove('hidden');
+    setFb('pass-feedback','🔓 密語正確，已解鎖下一站！','ok');
+    markStep(key, idx, 'passcode');
+    checkAllStepsAndRevealNext(key, idx);
+    renderStationList(key);
+  } else {
+    input.classList.remove('correct-input');
+    input.classList.add('wrong-input');
+    setTimeout(()=> input.classList.remove('wrong-input'), 400);
+    setFb('pass-feedback','❌ 密語錯誤，請向導師核實後重新輸入！','err');
+  }
+}
+
+/* ── Check All Steps → Reveal Nav ── */
+function checkAllStepsAndRevealNext(key, idx){
+  const total     = routesData[key].stations.length;
+  const nextBtn   = document.getElementById('btn-next-station');
+  const finishBtn = document.getElementById('btn-finish');
+  nextBtn.classList.add('hidden');
+  finishBtn.classList.add('hidden');
+  if(allStepsDone(key, idx)){
+    if(idx < total - 1) nextBtn.classList.remove('hidden');
+    else                finishBtn.classList.remove('hidden');
+  }
+}
+
+/* ── Navigation ── */
+function goNextStation(){
+  const detailPage = document.getElementById('page-station-detail');
+  if(detailPage) detailPage.scrollTop = 0;
+  window.scrollTo(0, 0);
+  openStation(state.stationIndex + 1);
+}
+
+function goToFinish(){
+  const rname = routesData[state.routeKey].name;
+  document.getElementById('finish-msg').textContent =
+    `${state.playerName}，你已完成「${rname}」所有站點！`;
+  state.activePage = 'page-finish';
+  saveProgress();
+  goToPage('page-finish');
+}
+
+/* ── Certificate ── */
+function openCert(){
+  const key   = state.routeKey;
+  const rname = routesData[key] ? routesData[key].name : '城市定向挑戰';
+  document.getElementById('cert-name').textContent       = state.playerName || '參加者';
+  document.getElementById('cert-route').textContent      = rname;
+  document.getElementById('cert-date-label').textContent = '2026年2月28日';
+  document.getElementById('cert-modal').classList.add('active');
+}
+function closeCert(){
+  document.getElementById('cert-modal').classList.remove('active');
+}
+function handleModalBgClick(e){
+  if(e.target === document.getElementById('cert-modal')) closeCert();
+}
+
+/* ── PDF Download ── */
+async function downloadPDF(){
+  const { jsPDF } = window.jspdf;
+  const certEl    = document.getElementById('cert-render');
+  const dlBtn     = document.querySelector('.btn-mini.btn-dark');
+  dlBtn.textContent = '⏳ 生成中…'; dlBtn.disabled = true;
+  try{
+    const origShadow = certEl.style.boxShadow;
+    certEl.style.boxShadow = 'none';
+    const canvas = await html2canvas(certEl,{
+      scale:3,useCORS:true,backgroundColor:'#FAFAF7',logging:false,
+      removeContainer:true});
+    certEl.style.boxShadow = origShadow;
+    const imgData = canvas.toDataURL('image/png');
+    const doc     = new jsPDF({unit:'pt',format:'a4',orientation:'portrait'});
+    const pw = doc.internal.pageSize.getWidth();
+    const ph = doc.internal.pageSize.getHeight();
+    const mg = 48;
+    const scale = Math.min((pw-mg*2)/canvas.width,(ph-mg*2)/canvas.height);
+    const fw = canvas.width*scale, fh = canvas.height*scale;
+    doc.setFillColor(250,250,247);
+    doc.rect(0,0,pw,ph,'F');
+    doc.addImage(imgData,'PNG',(pw-fw)/2,(ph-fh)/2,fw,fh);
+    const name = (state.playerName||'參加者').replace(/[\\/:*?"<>|]/g,'');
+    doc.save(`MAVIS_完成證書_${name}.pdf`);
+  } catch(err){
+    alert('PDF 生成失敗，請重試。\n'+err.message);
+  } finally {
+    dlBtn.textContent = '⬇ 下載 PDF'; dlBtn.disabled = false;
+  }
+}
+
+/* ── Shuffle ── */
+function shuffleArr(a){
+  for(let i=a.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [a[i],a[j]]=[a[j],a[i]];
+  }
+  return a;
+}
+
+/* ── Reload Restore ── */
+window.addEventListener('DOMContentLoaded', ()=>{
+  const hasSave = loadProgress();
+  if(!hasSave) return;
+  if(state.playerName){
+    const ni = document.getElementById('player-name');
+    if(ni) ni.value = state.playerName;
+  }
+  if(!state.playerName){ goToPage('page-gate'); return; }
+  const pg = state.activePage;
+  if(['page-station-list','page-station-detail'].includes(pg)
+      && state.routeKey && routesData[state.routeKey]){
+    const data = routesData[state.routeKey];
+    document.getElementById('list-route-name').textContent = data.name;
+    document.getElementById('list-route-sub').textContent  = data.sub;
+    renderStationList(state.routeKey);
+    preloadRouteImages(state.routeKey);
+  }
+  if(pg === 'page-station-detail' && state.routeKey){
+    const listPage = document.getElementById('page-station-list');
+    document.querySelector('.page.active')?.classList.remove('active');
+    listPage.classList.add('active');
+    openStation(state.stationIndex);
+    return;
+  }
+  if(pg === 'page-finish' && state.routeKey){
+    const rname = routesData[state.routeKey].name;
+    document.getElementById('finish-msg').textContent =
+      `${state.playerName}，你已完成「${rname}」所有站點！`;
+  }
+  const target = document.getElementById(pg);
+  if(target){
+    document.querySelector('.page.active')?.classList.remove('active');
+    target.classList.add('active');
+  }
+});
+<script>
+/* ============================================================
+   PART E — A 組港島線 routesData (9 stations)
+   ============================================================ */
+
+const routesData = {
+
+  hk:{
+    name : 'A 組：港島舊時光線',
+    sub  : '共 9 個站點・筲箕灣 → 灣仔',
+    stations:[
+
+      /* ── A1 ── */
+      {
+        name        : 'CP1：筲箕灣避風塘',
+        destination : '筲箕灣站 A3 出口，步行至巴士總站，約 3 分鐘',
+        imgUrl      : 'a1.jpg',
+        imgAlt      : '📷 筲箕灣避風塘',
+        poem        : '避風塘內船隱藏，\n海邊舊日訴漁故事。',
+        desc        : '筲箕灣避風塘昔日是香港重要的漁船避風港，養育了大批蜑家漁民。太古洋行更於鄰近的鰂魚涌建立糖廠與船塢，深刻影響整個東區的發展。今日海濱長廊保留了不少漁村歷史痕跡與資訊牌。',
+        poseHint    : '全組以最具個性的漁船或艇屋為背景，擺出「發現海寶」姿勢拍攝合照',
+        intro:{
+          q   : '請前往筲箕灣巴士總站，站在巴士站牌一側（以指定圖片視角為準），由右至左數站牌，找出由右起第四個巴士站牌，記錄：\n1. 該路線的巴士號碼\n2. 該路線的終點站名稱',
+          ans : 'KEYWORDS:608,九龍城'
+        },
+        quiz:{
+          type : 'open',
+          q    : '沿海濱長廊步行至筲箕灣避風塘，尋找介紹筲箕灣及鰂魚涌的資訊牌，填寫空格：\n\n「太古洋行早於一八八四年已在鰂魚涌設立糖廠，一九零七年更建成太古 ______，並興建職工宿舍，促進了此區的發展。」',
+          ans  : '船塢'
+        },
+        passcode : 'HarbourHunt'
+      },
+
+      /* ── A2 ── */
+      {
+        name        : 'CP2：愛秩序灣公園',
+        destination : '由筲箕灣避風塘沿海濱步行至愛秩序灣公園，約 10 分鐘',
+        imgUrl      : 'a2.jpg',
+        imgAlt      : '📷 愛秩序灣公園漁村裝置',
+        poem        : '避風塘外浪聲遠，\n愛秩序灣藏漁村夢。',
+        desc        : '愛秩序灣公園設有 1:1 比例的漁船模型及漁村主題裝置，重現昔日香港漁村風貌。公園臨海而設，是東區居民欣賞維港景色的秘密角落。',
+        poseHint    : '全組在漁村主題裝置旁，擺出「漁村時光」姿勢拍攝合照',
+        intro:{
+          q   : '離開筲箕灣避風塘前，請觀察海面及岸邊，記錄目前停泊在港內的漁船／艇屋總數量（以實際數字作答，沒有請填 0）。',
+          ans : 'OPEN'
+        },
+        quiz:{
+          type : 'open',
+          q    : '前往愛秩序灣公園，尋找 1:1 比例的漁船模型：\n1. 觀察模型旁水池內的船隻總數（包括大漁船及小艇），記錄數量。\n2. 記錄該裝置主要使用的材質（例如：木、金屬等）。\n\n請輸入船隻總數（例如：3）',
+          ans  : '3'
+        },
+        passcode : 'FishingDream'
+      },
+
+      /* ── A3 ── */
+      {
+        name        : 'CP3：太安樓',
+        destination : '前往座標 22.280434, 114.224413 附近電車站，再步行至太安樓，約 8 分鐘',
+        imgUrl      : 'a3.jpg',
+        imgAlt      : '📷 太安樓小食世界',
+        poem        : '舊樓商場藏小食林，\n地道味道守東區。',
+        desc        : '太安樓是西灣河一座充滿地道風味的舊式商場，聚集大量本地小食攤檔，售賣魚蛋、碗仔翅、格仔餅等懷舊食品。附近的電車站保留了香港僅存的雙層有軌電車系統。',
+        poseHint    : '全組在小食店前，手持或模擬手持小食，擺出「品嚐隱藏寶」姿勢拍攝合照',
+        intro:{
+          q   : '請前往座標 22.280434, 114.224413 附近的電車站。假設乘坐往上環方向的電車，請寫出：由本站開始，往上環方向的「第五個」電車站名稱（英文站名）。',
+          ans : '船塢里|Shipyard Lane|ShipyardLane|shipyardlane'
+        },
+        quiz:{
+          type : 'open',
+          q    : '在太安樓小食世界內，尋找指定店舖「○○小食」，記錄：\n1. 店舖中文招牌的總字數\n2. 店名最後一個中文字\n\n請輸入店名最後一個字（例如：食）',
+          ans  : '食'
+        },
+        passcode : 'SnackTreasure'
+      },
+
+      /* ── A4 ── */
+      {
+        name        : 'CP4：太古公園',
+        destination : '太古站 A 出口，步行至太古公園入口，約 8 分鐘',
+        imgUrl      : 'a4.jpg',
+        imgAlt      : '📷 太古公園',
+        poem        : '太古城中綠意寶，\n隱藏公園守寧靜。',
+        desc        : '太古公園隱藏於太古城住宅區內，是鬧市中難得的綠洲。公園前身是太古船塢工地，現以低調靜謐著稱，設有休憩設施及植物展示，是附近居民日常放鬆的秘密角落。',
+        poseHint    : '5 分鐘完成後，全組在原位置或附近，以「躺平也算努力」姿勢拍攝合照',
+        intro:{
+          /* 改動：刪除「提示：步行時間約 5–10 分鐘」避免洩漏答案範圍 */
+          q   : '請在地圖上找出最近的太古公園入口，並估計：由目前位置（地鐵站出閘位置）步行至該公園入口大約需要多少分鐘？請寫下預計時間。',
+          ans : 'RANGE:5-10'
+        },
+        quiz:{
+          type : 'open',
+          q    : '在太古公園內，選擇一個可安全躺下且不阻礙他人的位置（長椅、平台或草地）：\n\n全組需在該位置躺下連續 5 分鐘，其間只可輕聲交談，或靜靜聆聽周圍聲音（風聲、人聲、鳥聲等）。\n\n5 分鐘完成後，請輸入你在這段時間內聽到的一種聲音（例如：風聲）以確認完成。',
+          ans  : 'OPEN'
+        },
+        passcode : 'RelaxEffort'
+      },
+
+      /* ── A5 ── */
+      {
+        name        : 'CP5：健康邨遊樂場',
+        destination : '北角站或炮台山站，步行至七姊妹道，再前往健康邨遊樂場，約 10 分鐘',
+        imgUrl      : 'a5.jpg',
+        imgAlt      : '📷 健康邨遊樂場',
+        poem        : '七姊妹道藏童趣，\n社區角落有遊樂寶。',
+        desc        : '七姊妹道地名源自廣為流傳的民間傳說，充滿本地人文色彩。健康邨是香港早期公共屋邨之一，邨內遊樂場保留了舊式設施，是社區集體回憶的重要組成部分。',
+        poseHint    : '全組在遊樂設施旁，擺出「童心全開」姿勢拍攝合照',
+        intro:{
+          q   : '關於「七姊妹道」地名最常見的民間傳說，請選擇最符合的一項：\nA. 七位慈善家在此設立孤兒院，後人為紀念而命名\nB. 七位情同手足的漁家姐妹為逃婚投海殉節而得名\nC. 七位修女在此建立天主教學校而得名\nD. 七位本地女商人在此合資開辦工廠而聞名',
+          ans : 'B|b|KEYWORDS:漁家姐妹,逃婚,投海,殉節'
+        },
+        quiz:{
+          type : 'open',
+          q    : '在健康邨遊樂場內，請到達相片中的位置，全員拿着手機擺出朝拍照者做出拍照的動作。\n\n完成後，請記錄健康邨遊樂場最大滑梯本體（不包括欄杆）主要使用了幾種顏色。\n請輸入顏色數量（例如：3）',
+          ans  : 'OPEN'
+        },
+        passcode : 'ChildhoodJoy'
+      },
+
+      /* ── A6 ── */
+      {
+        name        : 'CP6：油街實現',
+        destination : '北角站 A 出口，步行至北角海濱花園，再前往油街實現，約 8 分鐘',
+        imgUrl      : 'a6.jpg',
+        imgAlt      : '📷 油街實現藝術空間',
+        poem        : '舊倉庫變身藝術寶庫，\n油街隱藏創意靈魂。',
+        desc        : '油街實現（Oil Street Art Space）前身為 1908 年建成的香港遊艇會會所，現為政府活化的藝術空間。北角海濱花園臨維港而設，欄杆設有連續編號，是本站的引子觀察重點。',
+        poseHint    : '全組在指定公共藝術作品前，擺出「藝術尋寶」姿勢拍攝合照',
+        intro:{
+          q   : '在北角海濱花園臨海欄杆，請找到以下指定圖片的對應位置，回答：\n\n該位置的北方是什麼地方？',
+          ans : '啟德|启德|Kai Tak|KaiTak'
+        },
+        quiz:{
+          type : 'open',
+          q    : '在油街實現室外，尋找指定的公共藝術作品，在其展板上抄錄：\n1. 作品名稱\n2. 創作年份\n\n請輸入創作年份（例如：2019）',
+          ans  : 'OPEN'
+        },
+        passcode : 'ArtQuest'
+      },
+
+      /* ── A7 ── */
+      {
+        name        : 'CP7：維多利亞公園',
+        destination : '天后站 A1 出口，步行至維多利亞公園外圍，約 6 分鐘',
+        imgUrl      : 'a7.jpg',
+        imgAlt      : '📷 維多利亞公園大噴泉',
+        poem        : '維多利亞守鬧市，\n綠蔭小徑藏寧靜。',
+        desc        : '維多利亞公園是香港最大的市區公園之一，每年舉辦大型年宵及花卉展覽。公園外圍種有多棵百年老樹，樹根明顯伸出地面，見證了城市的歲月變遷。',
+        poseHint    : '全組在噴水池前，擺出「噴泉許願」姿勢拍攝合照',
+        intro:{
+          q   : '在維多利亞公園外圍，找到一棵樹根明顯伸出地面的老樹，記錄該樹旁最近的一支燈柱編號。',
+          ans : '43780'
+        },
+        quiz:{
+          type : 'open',
+          q    : '在維多利亞公園大噴泉附近，尋找指定的介紹牌或紀念牌，抄錄牌上最明顯的一個年份（格式為 19xx 或 20xx）。\n\n請輸入該年份。',
+          ans  : '1962'
+        },
+        passcode : 'FountainWish'
+      },
+
+      /* ── A8 ── */
+      {
+        name        : 'CP8：天后後巷',
+        destination : '天后站 A2 出口，步行至大坑蓮花宮，再前往聖公會聖瑪利亞堂，約 8 分鐘',
+        imgUrl      : 'a8.jpg',
+        imgAlt      : '📷 大坑蓮花宮',
+        poem        : '大坑蓮花守舊村，\n女神靈氣藏火龍。',
+        desc        : '大坑蓮花宮供奉觀音，與每年中秋舞火龍文化密切相關。聖公會聖瑪利亞堂由建築師周耀年及李禮之設計，1937 年落成，是香港島東區第一所聖公會教堂，常被形容為「山上之城」。',
+        poseHint    : '全組在教堂門口或外牆前，擺出「守護歷史」姿勢拍攝合照',
+        intro:{
+          q   : '在蓮花宮外，有數則對聯，請回答（面向蓮花宮方向）右手邊對聯。',
+          ans : '開窗臨海面|閉月到龍洲|開窗臨海面閉月到龍洲'
+        },
+        quiz:{
+          type : 'open',
+          q    : '前往聖公會聖瑪利亞堂（由建築師周耀年及李禮之設計，於 1937 年落成）。\n\n聖公會聖馬利亞堂是香港聖公會在港島東區發展的「第一所」教會，常被形容為？（提示：四字詞）',
+          ans  : '山上之城'
+        },
+        passcode : 'HistoryGuard'
+      },
+
+      /* ── A9 ── */
+      {
+        name        : 'CP9：灣仔利東街 + 泰源街',
+        destination : '灣仔站 A1 出口，步行至利東街，約 6 分鐘',
+        imgUrl      : 'a9.jpg',
+        imgAlt      : '📷 灣仔利東街燈籠',
+        poem        : '婚卡舊街重生地，舊樓新貌藏故事。\n灣仔巷弄藏童趣，舊店堆滿復古寶。',
+        desc        : '利東街昔日以婚卡印刷店聞名，人稱「喜帖街」，重建後成為有頂蓋行人購物街，保留燈籠、仿舊招牌等懷舊元素。泰源街是灣仔保留玩具模型店的傳統街道，兩街合組灣仔最後的舊日情懷。',
+        poseHint    : '全組在天花掛滿玩具的走廊或店門前，擺出「童年尋寶」姿勢拍攝合照',
+        intro:{
+          q   : '在利東街指定路段（起點與終點將預先標示），向上望並數算頭頂懸掛的紅色燈籠總數，記錄實際數目。',
+          ans : '300|300個'
+        },
+        quiz:{
+          type : 'open',
+          q    : '以下指定圖片中的物件，價格為多少港元？\n\n請輸入價格數字（例如：120）',
+          ans  : '69'
+        },
+        passcode : 'ToyHunt'
+      }
+
+    ]/* end hk stations */
+  },
+
+  /* ── B 組東鐵文脈線 ── */
+  nt:{
+    name     : 'B 組：東鐵文脈線',
+    sub      : '共 9 個站點・上水 → 旺角',
+    stations : []
+  }
+
+};/* end routesData partial */
+
+/* ============================================================
+   PART F — B 組東鐵文脈線 routesData (9 stations)
+   ============================================================ */
+
+routesData.nt.stations = [
+
+  /* ── B1 ── */
+  {
+    name        : 'CP1：粉嶺圍',
+    destination : '上水站 B2 出口，步行至北區公園旁粉嶺圍，約 15 分鐘',
+    imgUrl      : 'b1.jpg',
+    imgAlt      : '📷 粉嶺圍門樓',
+    poem        : '上水古道連粉嶺，\n圍村門樓守歲月。',
+    desc        : '粉嶺圍是新界北部保存最完整的圍村之一，圍牆與門樓為防禦建築，用以抵禦盜匪。門樓圖案、對聯與石獅呈現村落的身份認同與傳統價值觀，是新界鄉村文化的珍貴見證。',
+    poseHint    : '全組在門樓附近與石獅或最顯眼標誌合照一張，擺出「古村守護」姿勢',
+    intro:{
+      q   : '在上水站，若要前往北區公園，應從哪個出口離開？\n請輸入出口編號（例如：A1）',
+      ans : 'B2|b2'
+    },
+    quiz:{
+      type : 'open',
+      q    : '搭乘東鐵線由上水前往粉嶺，下車後步行至北區公園旁的粉嶺圍入口。\n\n全組在門樓附近與石獅或最顯眼標誌合照一張，擺出「古村守護」姿勢。\n\n完成後，抄下門樓對聯上聯（右邊那行）的最後三個字，輸入下方。\n（答案以展板所示為準）',
+      ans  : 'OPEN'
+    },
+    passcode : 'AncientGuard'
+  },
+
+  /* ── B2 ── */
+  {
+    name        : 'CP2：香港鐵路博物館',
+    destination : '太和站出口，步行至香港鐵路博物館，約 10 分鐘',
+    imgUrl      : 'b2.jpg',
+    imgAlt      : '📷 香港鐵路博物館蒸汽火車',
+    poem        : '太和鐵軌藏舊時光，\n博物館中聽火車鳴。',
+    desc        : '香港鐵路博物館位於舊大埔火車站原址，展示蒸汽機車、柴油車卡及早期站房，是香港鐵路發展史的縮影。建築本身已被列為法定古蹟，極具歷史價值。',
+    poseHint    : '全組在所選火車車卡前，擺出「鐵路時光旅行」姿勢拍攝合照',
+    intro:{
+      q   : '太和站的兩個出口 A 及 B，哪一個出口比較「寒」？\n（提示：與冷氣相關的幽默解釋）\n請輸入出口字母及你認為最合理的理由（例如：B，因為……）',
+      ans : 'OPEN'
+    },
+    quiz:{
+      type : 'open',
+      /* 改動：刪除最後一句「展示車卡標準答案為 1+2+6+4=13」，避免直接洩漏答案 */
+      q    : '在香港鐵路博物館內，展示了各式各樣的火車車卡。\n\n請選擇一節展示中的火車車卡，抄下其完整編號，並將編號中的所有數字相加，寫下總和。\n\n（例如：編號 E1264 → 1+2+6+4 = 13）\n\n請輸入你所選車卡編號的數字總和。',
+      ans  : '13|1264'
+    },
+    passcode : 'RailJourney'
+  },
+
+  /* ── B3 ── */
+  {
+    name        : 'CP3：大埔藝術中心',
+    destination : '由鐵路博物館步行至太和橋，再前往大埔藝術中心，約 12 分鐘',
+    imgUrl      : 'b3.jpg',
+    imgAlt      : '📷 大埔藝術中心',
+    poem        : '太和橋畔古宅靜，\nIsland House 訴百年事。',
+    desc        : 'Island House 建於 1906 年，前身為英國殖民政府的政務官官邸，是典型的殖民時期洋房建築，現活化為大埔藝術中心，可俯瞰大埔海，見證英治時代的行政歷史。',
+    poseHint    : '全組在大埔藝術中心建築外牆或正門前，擺出「歷史守望」姿勢拍攝合照',
+    intro:{
+      q   : '站在太和橋上，填充以下空格：\n\n「大埔林村河上的太和橋，屬於1984–1992年間興建的一批林村河行人橋之一，與錦石橋、錦和橋、廣福「新」行人橋、_______ 同屬較新的行人天橋系統。」\n\n請輸入空格答案。',
+      ans : '寶鄉橋'
+    },
+    quiz:{
+      type : 'mc',
+      q    : '下列哪一項最全面地說明港英政府在十九世紀末選址大埔元洲仔興建新界理民官官邸時，所考慮的交通與管治優勢？',
+      options:[
+        'A. 元洲仔位於大埔墟正中央，便於步行管理市集',
+        'B. 元洲仔三面環水，水路交通方便，兼具視野監察優勢',
+        'C. 元洲仔鄰近火車站，方便官員乘搭鐵路往返九龍',
+        'D. 元洲仔地勢最高，可作信號站及氣象觀測之用'
+      ],
+      ans  : 'B. 元洲仔三面環水，水路交通方便，兼具視野監察優勢'
+    },
+    passcode : 'HeritageWatch'
+  },
+
+  /* ── B4 ── */
+  {
+    name        : 'CP4：寶湖花園嘉利美食',
+    destination : '大埔墟站，步行至街心公園，再前往寶湖花園商場，約 12 分鐘',
+    imgUrl      : 'b4.jpg',
+    imgAlt      : '📷 街心公園海豚遊樂設備',
+    poem        : '街心海豚躍碧波，\n寶湖小食暖人心。',
+    desc        : '大埔街心公園設有海豚主題遊樂設施，是區內小朋友的玩樂天地。寶湖花園「嘉利美食」是深受街坊愛戴的地道小食店，充滿煙火氣息。',
+    poseHint    : '全組在嘉利美食店前，手持或展示小食，擺出「美食分享樂」姿勢拍攝合照',
+    intro:{
+      q   : '在指定街心公園內，找到海豚主題的遊樂設備，記錄該設備主要的顏色。\n請輸入主要顏色（例如：藍色）',
+      ans : '紅色|紅|red'
+    },
+    quiz:{
+      type : 'open',
+      q    : '前往寶湖花園商場內的「嘉利美食」，全隊需購買至少一份小食，並由隊員共同分享。\n\n完成後，請輸入你們購買的小食名稱，以確認完成任務。\n（例如：魚蛋）',
+      ans  : 'OPEN'
+    },
+    passcode : 'FoodShare'
+  },
+
+  /* ── B5 ── */
+  {
+    name        : 'CP5：曾大屋',
+    destination : '沙田站，步行至沙田公園，再前往曾大屋，約 20 分鐘',
+    imgUrl      : 'b5.jpg',
+    imgAlt      : '📷 曾大屋圍門',
+    poem        : '城門河畔公園綠，\n曾大屋中傳石匠魂。',
+    desc        : '曾大屋建於 1840 年代，為客家曾氏家族建造的圍屋，採三堂四橫式大型院落設計。開村始祖曾貫萬靠打石業致富，建成這座宏偉圍屋，現為香港法定古蹟。',
+    poseHint    : '全組在曾大屋正門或圍牆前，擺出「古宅探秘」姿勢拍攝合照',
+    intro:{
+      q   : '沙田公園在正式命名為「沙田公園」之前，曾使用哪一個名稱？\nA. 沙田海濱公園\nB. 沙田中央公園\nC. 沙田城門河公園\nD. 沙田新市鎮公園',
+      ans : 'B|b|沙田中央公園'
+    },
+    quiz:{
+      type : 'mc',
+      q    : '下列哪一項最切合歷史記載，說明曾大屋開村始祖曾貫萬「致富之道」的性質？',
+      options:[
+        'A. 憑藉經營米行及糧食貿易，累積豐厚商業資本',
+        'B. 以放貸及收租為業，逐漸成為新界北大地主',
+        'C. 承接英國政府在港的石材工程，以打石採礦業致富',
+        'D. 透過與英商合辦船運公司，壟斷大埔至九龍的航線'
+      ],
+      ans  : 'C. 承接英國政府在港的石材工程，以打石採礦業致富'
+    },
+    passcode : 'VillageLegacy'
+  },
+
+  /* ── B6 ── */
+  {
+    name        : 'CP6：車公廟',
+    destination : '車公廟站步行至車公廟，約 8 分鐘',
+    imgUrl      : 'b6.jpg',
+    imgAlt      : '📷 車公廟轉運輪',
+    poem        : '曾氏舊村過橋行，\n車公轉輪驅疫靈。',
+    desc        : '沙田車公廟供奉南宋名將車公，相傳瘟疫時請車公建廟後疫情消除。廟內巨大車公像與銅風車轉運輪是新年求平安、轉運的重要儀式，吸引大批善信前來祈福。',
+    poseHint    : '全組在車公廟轉運輪前，擺出「轉運求福」姿勢拍攝合照',
+    intro:{
+      q   : '根據車公廟的傳說與介紹，車公廟建廟的主要原因是為了什麼？\n請用簡短詞語回答。',
+      ans : 'KEYWORDS:驅除疫症,瘟疫,驅瘟,疫症,消除瘟疫'
+    },
+    quiz:{
+      type : 'mc',
+      q    : '車公廟建廟的傳說，主要是為了驅除什麼災難？',
+      options : ['瘟疫', '水災', '旱災', '戰亂'],
+      ans     : '瘟疫'
+    },
+    passcode : 'TemplePrayer'
+  },
+
+  /* ── B7 ── */
+  {
+    name        : 'CP7：大圍舊村後巷',
+    destination : '車公廟站步行至 Che Kung Bridge，再前往大圍舊村後巷，約 12 分鐘',
+    imgUrl      : 'b7.jpg',
+    imgAlt      : '📷 大圍舊村後巷鐵閘',
+    poem        : '車公橋邊舊村深，\n後巷鐵閘藏舊痕。',
+    desc        : '大圍原由積存圍等圍村構成，後巷保留了 1960–80 年代的鐵閘、老店門面，是昔日居民童年玩耍、穿梭的日常路徑。每扇鐵閘都是一段家庭故事，充滿歷史感。',
+    poseHint    : '全組在 Che Kung Bridge 上，以橋上欄杆及河道景觀為背景拍攝全組合照',
+    intro:{
+      q   : '在 Che Kung Bridge 上指定位置，由工作人員或隊伍成員拍攝一張全組合照，畫面需包括橋上欄杆及河道景觀。\n\n完成後請輸入「已拍照」以確認。',
+      ans : 'OPEN'
+    },
+    quiz:{
+      type : 'mc',
+      q    : '【題目一：巷道格局】\n大圍舊村後巷的巷道格局，主要反映了以下哪一種傳統規劃邏輯？',
+      options:[
+        'A. 以風水原則為主，巷道方向須配合山勢水流',
+        'B. 以防衛功能為主，窄巷設計令外敵難以快速穿越',
+        'C. 以商業流通為主，巷道寬度配合貨物運輸需求',
+        'D. 以採光通風為主，巷道方向配合季候風向設計'
+      ],
+      ans  : 'B. 以防衛功能為主，窄巷設計令外敵難以快速穿越'
+    },
+    passcode : 'AlleyTrace'
+  },
+
+  /* ── B8 ── */
+  {
+    name        : 'CP8：九龍塘站',
+    destination : '九龍塘站，步行至又一城商場，再前往建新中心，約 8 分鐘',
+    imgUrl      : 'b8.jpg',
+    imgAlt      : '📷 九龍塘建新中心',
+    poem        : '又一城中電梯網，\n九龍塘外層層疊。',
+    desc        : '又一城商場以縱橫交錯的扶手電梯網絡著稱，設計目的是引導人流經過最多商舖，增加消費機會。建新中心從聯合道外觀視角呈現獨特的「錯視」層數效果，是九龍塘標誌性建築。',
+    poseHint    : '全組在建新中心外（以聯合道視角為主），擺出「層層疊疊」姿勢拍攝合照',
+    intro:{
+      q   : '又一城內的扶手電梯設計呈縱橫交錯狀，如同蜘蛛網般分布。請簡要說明這種設計的主要原因。\n（接受相關描述：引導人流／令人流平均分布各層／增加逗留時間與消費機會等）',
+      ans : 'KEYWORDS:人流,商舖,動線,消費,逗留,分布'
+    },
+    quiz:{
+      type : 'mc',
+      q    : '建新中心最標誌性的「太空時代」設計元素包括以下哪一項？',
+      options:[
+        'A. 外牆全部採用反光銀色金屬板',
+        'B. 1 樓設有圓拱形窗門設計',
+        'C. 天台設有旋轉餐廳及瞭望台',
+        'D. 地下大堂設有太空艙形狀接待處'
+      ],
+      ans  : 'B. 1 樓設有圓拱形窗門設計'
+    },
+    passcode : 'LayeredCity'
+  },
+
+  /* ── B9 ── */
+  {
+    name        : 'CP9：上海街 618 唐樓群',
+    destination : '旺角東站出口，步行至上海街 618，約 10 分鐘',
+    imgUrl      : 'b9.jpg',
+    imgAlt      : '📷 上海街 618 唐樓騎樓',
+    poem        : '旺角東站喧鬧過，\n上海街舊唐樓藏時光膠囊。',
+    desc        : '上海街 618 是旺角一幢活化唐樓項目，保留了原有的外牆結構與騎樓設計，並引入文創商戶。騎樓柱子上層層疊疊的舊廣告字跡，是香港商業發展史的活化石。',
+    poseHint    : '全組在上海街 618 唐樓群的騎樓下（以柱子或舊招牌最明顯處為背景），擺出「歲月時光膠囊」姿勢拍攝合照',
+    intro:{
+      /* 改動：刪除「答案約 15–17 分鐘」，改為提示使用地圖工具估算 */
+      q   : '請在地圖上找出上海街 618 唐樓群，並估計：\n由目前位置（旺角東站出閘位置）步行至該唐樓入口大約需要多少分鐘？\n（提示：可利用地圖 APP 以一般步速估算）\n\n請輸入你的估計分鐘數（例如：16）',
+      ans : 'RANGE:15-17'
+    },
+    quiz:{
+      type : 'open',
+      q    : '觀察上海街 618 騎樓柱子上層層疊疊的舊字樣。\n\n這些字以前主要用作哪一種用途？請以簡短詞語回答。\n（例如：廣告招牌字、商號名稱、店舖招牌用字等描述均可接受）',
+      ans  : 'OPEN'
+    },
+    passcode : 'TimeCapsule'
+  }
+
+];/* end nt stations */
+
+</script>
+</body>
+</html>
